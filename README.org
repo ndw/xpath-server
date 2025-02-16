@@ -1,0 +1,95 @@
+#+TITLE: XPath Server
+
+This is a small web server application. It evaluates XPath expressions against
+an input document and returns a summary of the results. This is integrated into
+Emacs so that you can quickly navigate to the matches.
+
+The whole thing is an afternoon’s hack, so it’s probably a bit rough around the
+edges.
+
+It was inspired by [[https://github.com/BMarkmann/emacs-xpath][emacs-xpath]] which someone pointed me to on Mastodon, I think.
+
+* Installation
+:PROPERTIES:
+:CUSTOM_ID: h-B08CC81D-F852-4EA2-8B48-DB7BAE815207
+:END:
+
+Download the release and unpack it somewhere.
+
+* Running the server
+:PROPERTIES:
+:CUSTOM_ID: h-A84E0E38-DE46-42CE-8D5C-2863DA8F6815
+:END:
+
+Start the application with
+
+#+BEGIN_SRC
+java -jar /path/to/xpath-server.jar <port>
+#+END_SRC
+
+If no port is specified the default port is 5078.
+
+* Querying documents
+:PROPERTIES:
+:CUSTOM_ID: h-7AF0DA7A-27DB-4980-A96B-51D1F2257B0B
+:END:
+
+1. Post the document to the server, like this:
+
+#+BEGIN_SRC
+curl -H "Content-type:application/xml" -X POST \
+     "http://localhost:5078/document?filename=/path/to/file.xml" \
+     --data-binary @/path/to/file.xml
+#+END_SRC
+
+The response ~OK XML~ indicates success.
+
+2. Post an XPath expression to the server, like this:
+
+#+BEGIN_SRC
+curl -H "Content-type:application/xpath" -X POST \
+     http://localhost:5078/xpath \
+     --data-binary "(//*:para[contains(., 'the')])[position() lt 4]"
+#+END_SRC
+
+The namespace bindings on the root element are available by default. The binding
+“_” is added for the default namespace, if there is one. (If “_” is otherwise bound,
+a different unique prefix is generated.)
+
+3. Add a namespace binding:
+
+#+BEGIN_SRC
+curl -X POST -dns="http://docbook.org/ns/docbook" \
+     http://localhost:5078/namespace/db
+#+END_SRC
+
+If the binding succeeds, the response will be a string in the form of a
+namespace declaration. The namespace bindings added this way persist across
+multiple documents.
+
+4. Query the namespace bindings:
+
+#+BEGIN_SRC
+curl http://localhost:5078/namespaces
+#+END_SRC
+
+* Querying in Emacs
+:PROPERTIES:
+:CUSTOM_ID: h-1141B932-3112-4594-9DE1-6FCD4BD5C2E7
+:END:
+
+The whole point, really…
+
+1. Load ~xpath-eval.el~
+2. Open an XML document and run ~xpath-server-xpath-eval~
+3. Emacs will prompt for an XPath expression, upload the current document, query
+   it with the expression, and return the results. The results buffer is read only.
+4. In the results buffer, pressing “g” will take you to the location of the
+   current result (the one the cursor is in). Pressing “G” will take you to the
+   location then delete the results buffer.
+
+To bind additional namespace prefixes, run ~xpath-server-xpath-xmlns~
+
+To see the current namespace bindings, run ~xpath-server-xpath-namespaces~
+
+I bind ~xpath-server-xpath-eval~ to ~Ctl-t Ctl-x~ in ~nxml-mode~ but YMMV.

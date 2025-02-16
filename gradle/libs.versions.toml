@@ -1,0 +1,12 @@
+[versions]
+junit-jupiter = "5.11.1"
+restlet = "2.5.1"
+htmlparser = "1.4.16"
+
+[libraries]
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter", version.ref = "junit-jupiter" }
+restlet = { module = "org.restlet:org.restlet", version.ref = "restlet" }
+htmlparser = { module = "nu.validator:htmlparser", version.ref = "htmlparser" }
+
+[plugins]
+kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version = "2.0.21" }
