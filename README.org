@@ -24,7 +24,7 @@ Download the release and unpack it somewhere.
 Start the application with
 
 #+BEGIN_SRC
-java -jar /path/to/xpath-server.jar <port>
+java -jar /path/to/xpath-server-<version>.jar <port>
 #+END_SRC
 
 If no port is specified the default port is 5078.
@@ -36,42 +36,42 @@ If no port is specified the default port is 5078.
 
 1. Post the document to the server, like this:
 
-#+BEGIN_SRC
-curl -H "Content-type:application/xml" -X POST \
-     "http://localhost:5078/document?filename=/path/to/file.xml" \
-     --data-binary @/path/to/file.xml
-#+END_SRC
+   #+BEGIN_SRC
+   curl -H "Content-type:application/xml" -X POST \
+        "http://localhost:5078/document?filename=/path/to/file.xml" \
+        --data-binary @/path/to/file.xml
+   #+END_SRC
 
-The response ~OK XML~ indicates success.
+   The response ~OK XML~ indicates success.
 
 2. Post an XPath expression to the server, like this:
 
-#+BEGIN_SRC
-curl -H "Content-type:application/xpath" -X POST \
-     http://localhost:5078/xpath \
-     --data-binary "(//*:para[contains(., 'the')])[position() lt 4]"
-#+END_SRC
+   #+BEGIN_SRC
+   curl -H "Content-type:application/xpath" -X POST \
+        http://localhost:5078/xpath \
+        --data-binary "(//*:para[contains(., 'the')])[position() lt 4]"
+   #+END_SRC
 
-The namespace bindings on the root element are available by default. The binding
-“_” is added for the default namespace, if there is one. (If “_” is otherwise bound,
-a different unique prefix is generated.)
+   The namespace bindings on the root element are available by default. The binding
+   “_” is added for the default namespace, if there is one. (If “_” is otherwise bound,
+   a different unique prefix is generated.)
 
 3. Add a namespace binding:
 
-#+BEGIN_SRC
-curl -X POST -dns="http://docbook.org/ns/docbook" \
-     http://localhost:5078/namespace/db
-#+END_SRC
+   #+BEGIN_SRC
+   curl -X POST -dns="http://docbook.org/ns/docbook" \
+        http://localhost:5078/namespace/db
+   #+END_SRC
 
-If the binding succeeds, the response will be a string in the form of a
-namespace declaration. The namespace bindings added this way persist across
-multiple documents.
+   If the binding succeeds, the response will be a string in the form of a
+   namespace declaration. The namespace bindings added this way persist across
+   multiple documents.
 
 4. Query the namespace bindings:
 
-#+BEGIN_SRC
-curl http://localhost:5078/namespaces
-#+END_SRC
+   #+BEGIN_SRC
+   curl http://localhost:5078/namespaces
+   #+END_SRC
 
 * Querying in Emacs
 :PROPERTIES:
