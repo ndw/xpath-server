@@ -32,7 +32,7 @@ The XPath server must be listening on this port."
   (let ((url-request-method "POST")
         (url-request-extra-headers `(("Content-Type" . "application/xml")))
         (url-request-data          (encode-coding-string (buffer-string) 'utf-8))
-        (url (xpath-server--server-uri (concat "/document?uri=" (buffer-file-name)))))
+        (url (xpath-server--server-uri (concat "/document/" (buffer-file-name)))))
     (let ((upload (url-retrieve-synchronously url)))
       (save-excursion
         (with-current-buffer upload
@@ -47,7 +47,51 @@ The XPath server must be listening on this port."
         (url-request-data          (encode-coding-string xpath 'utf-8)))
     (url-retrieve (xpath-server--server-uri "/xpath") 'xpath-server--switch-to-url-buffer)))
 
-(defun xpath-server-xpath-eval (xpath)
+(defun xpath-server-watch (arg)
+  "Watch the directory that the current buffer is visiting."
+  (interactive "P")
+  (if (buffer-file-name) 
+      (let ((url-request-method "POST")
+            (uri (xpath-server--server-uri (concat "/watch" (file-name-directory (buffer-file-name))))))
+        (let ((watch
+               (if arg
+                   (url-retrieve-synchronously (concat uri "?stop"))
+                 (url-retrieve-synchronously uri))))
+          (save-excursion
+            (with-current-buffer watch
+              (beginning-of-buffer)
+              (search-forward "\n\n")
+              (message (buffer-substring (point) (point-max)))))
+          (kill-buffer watch)))))
+
+(defun xpath-server-search (xpath)
+  "Find the nodes that match XPATH in the current document."
+  (interactive "MEnter XPath: ")
+  (let ((url-request-method "POST")
+        (url-request-extra-headers `(("Content-Type" . "application/xpath")))
+        (url-request-data (encode-coding-string xpath 'utf-8)))
+    (url-retrieve (xpath-server--server-uri "/search") 'xpath-server--switch-to-url-buffer)))
+
+(defun xpath-server-status (arg)
+  "Report the server status."
+  (interactive "P")
+  (let ((url-request-method "GET")
+        (uri (if arg
+                 (xpath-server--server-uri "/?debug=1")
+               (xpath-server--server-uri "/"))))
+    (let ((status (url-retrieve-synchronously uri)))
+      (if arg
+          (with-output-to-temp-buffer "XPath server status"
+            (with-current-buffer status
+              (beginning-of-buffer)
+              (search-forward "\n\n")
+              (princ (buffer-substring (point) (point-max)))))
+        (with-current-buffer status
+          (beginning-of-buffer)
+          (search-forward "\n\n")
+          (message (buffer-substring (point) (point-max))))))))
+
+(defun xpath-server-query (xpath)
   "Find the nodes that match XPATH in the current document."
   (interactive "MEnter XPath: ")
   (let ((ok (xpath-server--post-document)))
@@ -55,24 +99,7 @@ The XPath server must be listening on this port."
         (xpath-server--post-xpath xpath)
       (message "Upload failed"))))
 
-(defun xpath-server-xpath-xmlns (prefix uri)
-  "Declare a namespace binding for future queries."
-  (interactive "MEnter prefix: \nMEnter namespace name: ")
-  (let ((url-request-method "POST")
-        (url (xpath-server--server-uri (concat "/namespace/" prefix "?uri=" uri))))
-    (let ((upload (url-retrieve-synchronously url))
-          (start 0))
-      (save-excursion
-        (with-current-buffer upload
-          (beginning-of-buffer)
-          (search-forward "xmlns:")
-          (backward-char 6)
-          (setq start (point))
-          (end-of-buffer)
-          (message (buffer-substring start (point)))))
-      (kill-buffer upload))))
-
-(defun xpath-server-xpath-namespaces ()
+(defun xpath-server-namespaces ()
   "List the current namespace bindings."
   (interactive)
   (let ((url-request-method "GET")
@@ -88,30 +115,58 @@ The XPath server must be listening on this port."
           (message (buffer-substring start (point)))))
       (kill-buffer upload))))
 
+(defun xpath-server-xmlns (prefix uri)
+  "Declare a namespace binding for future queries."
+  (interactive "MEnter prefix: \nMEnter uri: ")
+  (let ((url-request-method "POST")
+        (url (xpath-server--server-uri (concat "/namespace/" prefix)))
+        (url-request-data (encode-coding-string uri 'utf-8)))
+    (let ((upload (url-retrieve-synchronously url))
+          (start 0))
+      (save-excursion
+        (with-current-buffer upload
+          (beginning-of-buffer)
+          (search-forward "\n\n")
+          (setq start (point))
+          (end-of-buffer)
+          (message (buffer-substring start (point)))))
+      (kill-buffer upload))))
+
 (defun xpath-server--goto-element ()
   "Navigate to the current match in the original document."
   (interactive)
-  (let ((prefix (save-excursion
-                  (beginning-of-buffer)
-                  (buffer-substring 1 (search-forward ":"))))
-        (xmlbuffer (save-excursion
-                     (beginning-of-buffer)
-                     (let ((start (search-forward "href="))
-                           (end 1))
-                       (forward-char)
-                       (setq end (search-forward "\""))
-                       (get-file-buffer (buffer-substring (1+ start) (1- end))))))
-        (start 0)
-        (end 0)
-        (lineno 0))
-    (search-backward (concat prefix "result "))
-    (search-forward "line=")
-    (forward-char)
-    (setq start (point))
-    (setq end (search-forward "\""))
-    (setq lineno (buffer-substring start (1- end)))
-    (switch-to-buffer xmlbuffer)
-    (goto-line (string-to-number lineno))))
+  (let* ((cur-line (count-lines 1 (point)))
+         (prefix (save-excursion
+                   (beginning-of-buffer)
+                   (buffer-substring 1 (search-forward ":"))))
+         (result (save-excursion
+                   (search-backward (concat prefix "result ") nil t)))
+         (start-line (if result
+                         (count-lines 1 result)
+                       nil))
+         (filename (if result
+                       (save-excursion
+                         (search-backward (concat prefix "path "))
+                         (let ((start (search-forward "href="))
+                               (end 1))
+                           (forward-char)
+                           (setq end (search-forward "\""))
+                           (buffer-substring (1+ start) (1- end))))
+                     nil))
+         (first-line (if (and filename result)
+                         (save-excursion
+                           (goto-char result)
+                           (search-forward "line=")
+                           (forward-char)
+                           (setq start (point))
+                           (setq end (search-forward "\""))
+                           (string-to-number (buffer-substring start (1- end))))
+                       nil)))
+     (if (and filename result)
+        (progn
+          (find-file filename)
+          (goto-line (1- (+ first-line (- cur-line start-line)))))
+      (message "Not in a result."))))
 
 (defun xpath-server--goto-element-and-kill-buffer ()
   "Navigate to the current match, then kill the results buffer."
@@ -144,5 +199,7 @@ The XPath server must be listening on this port."
       (progn
         (kill-buffer result-buffer)
         (message "No matches.")))))
+
+(provide 'xpath-eval)
 
 ;;; xpath-eval.el ends here

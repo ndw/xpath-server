@@ -13,10 +13,10 @@ class Namespace(): BaseResource() {
     override fun get(variant: Variant?): Representation? {
         val app = application as XPathServer
         val prefix = request.attributes.get("prefix").toString()
-        val uri = app.namespaces[prefix] ?: app.userDefinedNamespaces[prefix]
+        val uri = app.userDefinedNamespaces[prefix] ?: app.namespaces[prefix]
         if (uri == null) {
-            setStatus(Status.CLIENT_ERROR_BAD_REQUEST)
-            return StringRepresentation("No URI provided")
+            setStatus(Status.CLIENT_ERROR_NOT_FOUND)
+            return StringRepresentation("No such binding")
         } else {
             return StringRepresentation("xmlns:${prefix}=${uri}")
         }
@@ -55,6 +55,7 @@ class Namespace(): BaseResource() {
         val app = application as XPathServer
         val prefix = request.attributes.get("prefix").toString()
         app.userDefinedNamespaces.remove(prefix)
+        app.namespaces.remove(prefix)
         return StringRepresentation("OK")
     }
 }

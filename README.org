@@ -1,4 +1,9 @@
-#+TITLE: XPath Server
+:PROPERTIES:
+:ID:       44A80D32-3D83-424C-A809-2E7307523971
+:END:
+#+title: XPath Server
+#+date: <2025-02-19 Wed>
+#+startup: showall
 
 This is a small web server application. It evaluates XPath expressions against
 an input document and returns a summary of the results. This is integrated into
@@ -11,34 +16,73 @@ It was inspired by [[https://github.com/BMarkmann/emacs-xpath][emacs-xpath]] whi
 
 * Installation
 :PROPERTIES:
-:CUSTOM_ID: h-B08CC81D-F852-4EA2-8B48-DB7BAE815207
+:CUSTOM_ID: installation
 :END:
 
 Download the release and unpack it somewhere.
 
 * Running the server
 :PROPERTIES:
-:CUSTOM_ID: h-A84E0E38-DE46-42CE-8D5C-2863DA8F6815
+:CUSTOM_ID: running
 :END:
 
 Start the application with
 
 #+BEGIN_SRC
-java -jar /path/to/xpath-server-<version>.jar <port>
+java -jar /path/to/xpath-server-<version>.jar
 #+END_SRC
 
-If no port is specified the default port is 5078.
+The server is configured with a properties file. The default properties file is:
+
+#+BEGIN_SRC
+server.port=5078
+watch.depth=2
+watch.count=3
+ignore=^\\.\\# ^\\.git$ ^build$ ^\\.idea$
+parse=\\.xml$ \\.xpl$
+xmlns.prefix=namespace-uri
+#+END_SRC
+
++ server.port :: Specifies the server port
++ watch.depth :: Specifies the depth of recursion to use when watching a directory
++ watch.count :: Specifies the maximum number of concurrent watches
++ ignore :: Is a list of regular expressions to ignore when watching
++ parse :: Is a list of regular expressions to parse as XML when watching
++ xmlns.prefix :: Creates an in-scope namespace binding xmlns:prefix=namespace-uri
+
+An alternate configuration can be specified with the ~com.nwalsh.xml.xpath-server.properties~
+property. For example:
+
+#+BEGIN_SRC
+java -Dcom.nwalsh.xml.xpath-server.properties=myConfig.properties \
+     -jar /path/to/xpath-server-<version>.jar
+#+END_SRC
+
+** A note on regular expressions
+:PROPERTIES:
+:CUSTOM_ID: regex
+:END:
+
+The expressions aren’t anchored by default and note that within the property
+file, you have to escape a backslash:
+
+| Property file | Expression | Notes                                                          |
+|---------------+------------+----------------------------------------------------------------|
+| .xml          | .xml       | Matches any file that contains “xml” preceded by any character |
+| \.xml         | .xml       | Escaping the “.” is irrelevant                                 |
+| \\.xml$       | \.xml$     | Matches any file that ends “.xml”                              |
+|---------------+------------+----------------------------------------------------------------|
 
 * Querying documents
 :PROPERTIES:
-:CUSTOM_ID: h-7AF0DA7A-27DB-4980-A96B-51D1F2257B0B
+:CUSTOM_ID: query
 :END:
 
 1. Post the document to the server, like this:
 
    #+BEGIN_SRC
    curl -H "Content-type:application/xml" -X POST \
-        "http://localhost:5078/document?filename=/path/to/file.xml" \
+        "http://localhost:5078/document/path/to/file.xml" \
         --data-binary @/path/to/file.xml
    #+END_SRC
 
@@ -59,7 +103,7 @@ If no port is specified the default port is 5078.
 3. Add a namespace binding:
 
    #+BEGIN_SRC
-   curl -X POST -dns="http://docbook.org/ns/docbook" \
+   curl -X POST -duri="http://docbook.org/ns/docbook" \
         http://localhost:5078/namespace/db
    #+END_SRC
 
@@ -75,21 +119,191 @@ If no port is specified the default port is 5078.
 
 * Querying in Emacs
 :PROPERTIES:
-:CUSTOM_ID: h-1141B932-3112-4594-9DE1-6FCD4BD5C2E7
+:CUSTOM_ID: emacs
 :END:
 
 The whole point, really…
 
+There are five functions interactive in ~xpath-eval.el~:
+
++ xpath-server-watch :: Start watching the directory the current file is in
++ xpath-server-search :: Search all the watched files with an XPath expression
++ xpath-server-status :: Show the server status (with C-u, show detailed status)
++ xpath-server-query :: Search the current document with an XPath expression
++ xpath-server-namespaces :: Show the in-scope namespaces for an XPath query
++ xpath-server-xmlns :: Add a namespace binding to the in-scope namespaces
+
+For example:
+
 1. Load ~xpath-eval.el~
-2. Open an XML document and run ~xpath-server-xpath-eval~
+2. Open an XML document and run ~xpath-server-query~
 3. Emacs will prompt for an XPath expression, upload the current document, query
    it with the expression, and return the results. The results buffer is read only.
 4. In the results buffer, pressing “g” will take you to the location of the
    current result (the one the cursor is in). Pressing “G” will take you to the
    location then delete the results buffer.
 
-To bind additional namespace prefixes, run ~xpath-server-xpath-xmlns~
+If you’re in the middle of a result when you press “g” or “G”, the goto function
+attempts to take you to the same place in the source file. But it may be off by
+a little bit. Some details of the serialization (line breaks between attributes,
+for example) will effect the positioning.
 
-To see the current namespace bindings, run ~xpath-server-xpath-namespaces~
+I bind the interactive functions to keys in ~nxml-mode~, but YMMV.
 
-I bind ~xpath-server-xpath-eval~ to ~Ctl-t Ctl-x~ in ~nxml-mode~ but YMMV.
+* The API
+:PROPERTIES:
+:CUSTOM_ID: api
+:END:
+
+** GET /
+:PROPERTIES:
+:CUSTOM_ID: get-slash
+:END:
+
+Returns the status
+
+** DELETE /
+:PROPERTIES:
+:CUSTOM_ID: delete-slash
+:END:
+
+Stops the server
+
+** POST /document/{filename}
+:PROPERTIES:
+:CUSTOM_ID: post-document
+:END:
+
+Accepts a single XML document as the posted data. Makes that document available
+for evaluating subsequent XPath expressions.
+
+The ~filename~ is just used for the base URI and in the results. The server doesn’t
+attempt to load the file off the filesystem.
+
+** DELETE /document/{filename}
+:PROPERTIES:
+:CUSTOM_ID: delete-document
+:END:
+
+Discards the document. Only one document can be used at a time so posting
+a new document always discards any current document. But for completeness, you
+explicitly remove it.
+
+You must specify a filename, but it doesn’t have to match the filename you posted.
+
+** GET /namespaces
+:PROPERTIES:
+:CUSTOM_ID: get-namespaces
+:END:
+
+Shows the current in-scope namespaces for XPath expressions.
+
+** GET /namespace/{prefix}
+:PROPERTIES:
+:CUSTOM_ID: get-namespace
+:END:
+
+Shows the current in-scope namespace binding for the ~prefix~.
+
+** POST /namespace/{prefix}
+:PROPERTIES:
+:CUSTOM_ID: post-namespace
+:END:
+
+The namespace name (the URI) can be specified with the ~?uri~ parameter or as the
+posted data.
+
+** DELETE /namespace/{prefix}
+:PROPERTIES:
+:CUSTOM_ID: delete-namespace
+:END:
+
+Removes the namespace binding for ~prefix~.
+
+** GET /xpath?xpath={xpath-expression}
+:PROPERTIES:
+:CUSTOM_ID: get-xpath
+:END:
+
+Evaluates the ~xpath-expression~ against the current document and returns
+the results.
+
+** POST /xpath
+:PROPERTIES:
+:CUSTOM_ID: post-xpath
+:END:
+
+Accepts the XPath expression as the posted data, evaluates it against the
+current document, and returns the results.
+
+** POST /watch/{path}
+:PROPERTIES:
+:CUSTOM_ID: post-watch
+:END:
+
+Begins watching a directory. All of the files in the specified ~path~ that match
+~parse~ are loaded for subsequent queries. Any file (or directory) that matches
+~ignore~ is ignored. If the ~watch.depth~ is greater than one, subdirectories
+below the path will be added up to that depth. (A depth of 1 is only the path, a
+depth of 2 is the path and its immediate subdirectories, a depth of 3 is the
+path, its subdirectories and their subdirectories, etc.)
+
+If files are added, deleted, or modified in a watched directory, the server will
+automatically update them.
+
+At most ~watch.count~ directories may be watched simultaneously. If the count is
+exceeded, the watch on the least recenty watched directory will be discarded.
+
+(Each watched directory runs in a separate thread. Even though those threads
+spend most of the time blocked, waiting for files to change, it’s useful to keep
+the number somewhat limited.)
+
+** DELETE /watch/{path}
+:PROPERTIES:
+:CUSTOM_ID: delete-watch
+:END:
+
+Discards the watch on ~path~.
+
+** GET /search?xpath={xpath-expression}
+:PROPERTIES:
+:CUSTOM_ID: get-search
+:END:
+
+Evaluates the ~xpath-expression~ against all of the currently watched files and
+returns the results.
+
+The search is always applied across all the actively watched directories.
+There’s no way to limit the search to only a single watch if more than one watch
+is active.
+
+** POST /search
+:PROPERTIES:
+:CUSTOM_ID: post-search
+:END:
+
+Accepts the XPath expression as the posted data, evaluates it against all of the
+currently watched files and returns the results.
+
+* The search results
+:PROPERTIES:
+:CUSTOM_ID: search-results
+:END:
+
+See ~schema/results.rnc~
+
+The result of a search across watched files is a ~xsr:result-set~ that contains
+zero or more ~xsr:results~, one for each file. The result of a query on one
+document is a single ~xsr:results~ element.
+
+Each ~xsr:results~ begins with a ~xsr:path~ element that identifies the location
+of the file and summarizes how many matches were found. That’s followed by zero
+or more ~xsr:result~ elements, one for each match.
+
+Each ~xsr:result~ has attributes identifying which match it is and where it
+occurred. The content of the element is the matched node or nodes.
+
+If the search or query includes a document that wasn’t well formed (or was
+otherwise unparsable), it’s content is a comment with the error message. Such a
+document matches all XPath queries.
+

@@ -1,0 +1,8 @@
+<doc>
+  <title>Document Three</title>
+  <chap>
+    <title>Some title</title>
+    <para>Some para.
+    <para>Some other para.</para>
+  </chap>
+</doc>
