@@ -1,5 +1,6 @@
 plugins {
     alias(libs.plugins.kotlin.jvm)
+    id("com.github.gmazzo.buildconfig") version "5.5.0"
     application
 }
 
@@ -39,6 +40,15 @@ application {
 
 tasks.named<Test>("test") {
     useJUnitPlatform()
+}
+
+buildConfig {
+  className("XPathServerBuildConfig")
+  packageName("com.nwalsh.xml.xpathserver")
+  useKotlinOutput { internalVisibility = false } 
+
+  buildConfigField("NAME", "XPath server")
+  buildConfigField("VERSION", "${xpathServerVersion}")
 }
 
 fun distClasspath(): List<File> {

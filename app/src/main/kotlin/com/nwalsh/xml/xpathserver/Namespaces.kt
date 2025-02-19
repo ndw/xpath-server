@@ -1,5 +1,6 @@
 package com.nwalsh.xml.xpathserver
 
+import net.sf.saxon.om.NamespaceUri
 import org.restlet.representation.Representation
 import org.restlet.representation.StringRepresentation
 import org.restlet.representation.Variant
@@ -11,23 +12,21 @@ class Namespaces(): BaseResource() {
     override fun get(variant: Variant?): Representation? {
         val app = application as XPathServer
 
-        val seen = mutableSetOf<String>()
         val sb = StringBuilder()
         for ((prefix, uri) in app.namespaces) {
-            if (prefix != "xml") {
-                if (prefix == "") {
-                    sb.append("xmlns=").append(uri).append("\n")
-                } else {
-                    sb.append("xmlns:").append(prefix).append("=").append(uri).append("\n")
-                }
-            }
-            seen.add(prefix)
-        }
-
-        for ((prefix, uri) in app.userDefinedNamespaces) {
-            if (prefix !in seen) {
+            if (prefix == "") {
+                sb.append("xmlns=").append(uri).append("\n")
+            } else {
                 sb.append("xmlns:").append(prefix).append("=").append(uri).append("\n")
             }
+        }
+        for ((prefix, uri) in app.userDefinedNamespaces) {
+            sb.append("xmlns:").append(prefix).append("=").append(uri).append("\n")
+        }
+
+        val nslist = sb.toString()
+        if (nslist == "") {
+            return StringRepresentation("No bindings")
         }
 
         return StringRepresentation(sb.toString())

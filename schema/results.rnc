@@ -1,0 +1,38 @@
+default namespace = "http://nwalsh.com/ns/xpath-server/results"
+namespace xsr = "http://nwalsh.com/ns/xpath-server/results"
+
+start = xsr.resultSet | xsr.results
+
+xsr.resultSet =
+    element xsr:result-set {
+        attribute count { xsd:integer },
+        attribute xpath { text },
+        xsr.results*
+    }
+
+xsr.results =
+    element xsr:results {
+        xsr.path,
+        xsr.result*
+    }
+
+xsr.path =
+    element xsr:path {
+        attribute href { xsd:anyURI },
+        attribute count { xsd:integer },
+        empty
+    }
+
+xsr.result =
+    element xsr:result {
+        attribute number { xsd:integer },
+        attribute line { xsd:integer },
+        attribute column { xsd:integer },
+        (text | anyContent)*
+    }
+
+anyContent =
+    element * - xsr:* {
+        attribute * { text }*,
+        (text | anyContent)*
+    }
